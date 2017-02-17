@@ -222,12 +222,6 @@ def colors():
     return collections.namedtuple("Colorizer",
                                   "blue green red")(blue, green, red)
 
-
-def output_error_summary(total_errors, files_with_errors):
-    """Output summary of listed errors.."""
-    message = MSG_ERROR_SUMMARY % (total_errors, files_with_errors)
-    sys.stderr.write(col.red(message) + "\n")
-
 # Script entrypoint.
 if __name__ == "__main__":
 
@@ -306,7 +300,8 @@ if __name__ == "__main__":
                 sys.stderr.write("    %4d: %s\n" % (line, msg))
 
         # Summarize errors to stdout
-        output_error_summary(len(all_errors), files_with_errors)
+        message = MSG_ERROR_SUMMARY % (len(all_errors), files_with_errors)
+        sys.stderr.write(col.red(message) + "\n")
         sys.exit(1)
     else:
         print col.green(MSG_CHECKS_PASSED)
