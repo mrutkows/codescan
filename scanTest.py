@@ -36,7 +36,7 @@ import re
 import sys
 import textwrap
 
-VERBOSE = False
+VERBOSE = True
 
 # Translatable messages (error and general)
 ERR_LICENSE = "file does not include required license header."
@@ -46,6 +46,7 @@ ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 ERR_NO_EOL_AT_EOF = "file does not end with EOL."
 ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
 ERR_GENERAL = "There was an error."
+MSG_CHECKING_FILE = "Checking file[%s]..."
 MSG_CHECKS_PASSED = "All checks passed."
 MSG_SCRIPT_USAGE = "Usage: %s root_directory\n"
 MSG_ERROR_SUMMARY = "Summary: Scan detected %d error(s) in %d file(s)."
@@ -180,8 +181,8 @@ def line_checks(checks):
 def run_file_checks(file_path, checks):
     """Run a series of file-by-file checks."""
     errors = []
-    # if VERBOSE then print filename neing checked
-    vprint(col.green("Checking file[%s]..." % file_path))
+    # if VERBOSE (True) then print filename neing checked
+    vprint(col.green(MSG_CHECKING_FILE % file_path))
     for check in checks:
         errs = check(file_path)
         if errs:
