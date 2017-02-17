@@ -36,21 +36,25 @@ import re
 import sys
 import textwrap
 
-VERBOSE = True
+VERBOSE = False
 
-# Messages
+# Translatable messages (error and general)
 ERR_LICENSE = "file does not include standard copyright header"
 ERR_SYMBOLIC_LINK = "file is a symbolic link"
 ERR_TABS = "line contains tabs"
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces"
 ERR_NO_EOL_AT_EOF = "file does not end with EOL"
+ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
 ERR_GENERAL = "There was an error."
 MSG_CHECKS_PASSED = "All checks passed."
+MSG_SCRIPT_USAGE = "Usage: %s root_directory.\n"
+MSG_ERROR_SUMMARY = "Summary: Scan detected %d error(s) in %d file(s)."
 
 
 def vprint(s):
-    """."""
-    print s if VERBOSE else None
+    """Conditional print (stdout)."""
+    if VERBOSE:
+        print s
 
 
 def exceptional_paths():
@@ -90,7 +94,7 @@ def eol_at_eof(line):
 
 """Declare approved softare license headers as strings."""
 
-CP1 = """\
+COPYRIGHT_APACHE_SOFTWARE_FOUNDATION = """\
    /*
     * Licensed to the Apache Software Foundation (ASF) under one or more
     * contributor license agreements.  See the NOTICE file distributed with
@@ -109,7 +113,7 @@ CP1 = """\
     */
     """
 
-CP2 = """\
+COPYRIGHT_IBM_APACHE = """\
    /*
     * Copyright 2015-2016 IBM Corporation
     *
@@ -130,7 +134,8 @@ CP2 = """\
 
 def has_block_copyright(path):
     """Open file and verify it contains a valid license header."""
-    valid_licenses = [CP2, CP1]
+    valid_licenses = [COPYRIGHT_APACHE_SOFTWARE_FOUNDATION,
+                      COPYRIGHT_IBM_APACHE]
 
     with open(path) as fp:
         for license in valid_licenses:
@@ -218,21 +223,27 @@ def colors():
     return collections.namedtuple("Colorizer",
                                   "blue green red")(blue, green, red)
 
+
+def output_error_summary(total_errors, files_with_errors):
+    """Output summary of listed errors.."""
+    message = MSG_ERROR_SUMMARY % (total_errors, files_with_errors)
+    sys.stderr.write(col.red(message) + "\n")
+
 # Script entrypoint.
 if __name__ == "__main__":
 
-    # Prepare colorization methods
+    # Prepare message colorization methods
     col = colors()
 
     # Test necessary arguments exist
     if len(sys.argv) < 2:
-        sys.stderr.write(col.red("Usage: %s root_directory.\n" % sys.argv[0]))
+        sys.stderr.write(col.red(MSG_SCRIPT_USAGE % sys.argv[0]))
         sys.exit(1)
 
     root_dir = sys.argv[1]
 
     if not os.path.isdir(root_dir):
-        sys.stderr.write("%s: %s is not a directory.\n" %
+        sys.stderr.write(ERR_PATH_IS_NOT_DIRECTORY %
                          (sys.argv[0], root_dir))
 
     # This determines which checks run on which files.
@@ -269,18 +280,20 @@ if __name__ == "__main__":
 
     all_errors = []
 
-    # Runs all relevant checks on all relevant files.
+    # Runs all listed checks on all relevant files.
     for fltr, checks in file_checks:
         for path in fnmatch.filter(all_paths(root_dir), fltr):
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
     def sort_key(p):
-        """."""
+        """Define sort key for error listing as the filename."""
+        # Filename is the 0th entry in tuple
         return p[0]
 
     if all_errors:
         files_with_errors = 0
+
         for path, triples in itertools.groupby(sorted(all_errors,
                                                       key=sort_key),
                                                key=sort_key):
@@ -292,18 +305,9 @@ if __name__ == "__main__":
             for line, msg in pairs:
                 sys.stderr.write("    %4d: %s\n" % (line, msg))
 
-        # There's no reason not to pluralize properly.
-        if len(all_errors) == 1:
-            message = ERR_GENERAL
-        else:
-            if files_with_errors == 1:
-                message = "There were %d errors in a file." % len(all_errors)
-            else:
-                message = "There were %d errors in %d files." % \
-                          (len(all_errors),
-                           files_with_errors)
+        output_error_summary(len(all_errors), files_with_errors)
 
-        sys.stderr.write(col.red(message) + "\n")
+        # sys.stderr.write(col.red(message) + "\n")
         sys.exit(1)
     else:
         print col.green(MSG_CHECKS_PASSED)
