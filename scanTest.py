@@ -291,6 +291,7 @@ if __name__ == "__main__":
         # Filename is the 0th entry in tuple
         return p[0]
 
+    # Group/sort errors by filename
     if all_errors:
         files_with_errors = 0
 
@@ -305,9 +306,8 @@ if __name__ == "__main__":
             for line, msg in pairs:
                 sys.stderr.write("    %4d: %s\n" % (line, msg))
 
+        # Summarize errors to stdout
         output_error_summary(len(all_errors), files_with_errors)
-
-        # sys.stderr.write(col.red(message) + "\n")
         sys.exit(1)
     else:
         print col.green(MSG_CHECKS_PASSED)
