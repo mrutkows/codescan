@@ -1,2 +1,2 @@
 # codescan
-Simple code scanner in Pythion
+Simple code scanner in Python
