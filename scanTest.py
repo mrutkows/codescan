@@ -39,15 +39,15 @@ import textwrap
 VERBOSE = False
 
 # Translatable messages (error and general)
-ERR_LICENSE = "file does not include standard copyright header"
-ERR_SYMBOLIC_LINK = "file is a symbolic link"
-ERR_TABS = "line contains tabs"
-ERR_TRAILING_WHITESPACE = "line has trailing whitespaces"
-ERR_NO_EOL_AT_EOF = "file does not end with EOL"
+ERR_LICENSE = "file does not include required license header."
+ERR_SYMBOLIC_LINK = "file is a symbolic link."
+ERR_TABS = "line contains tabs."
+ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
+ERR_NO_EOL_AT_EOF = "file does not end with EOL."
 ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
 ERR_GENERAL = "There was an error."
 MSG_CHECKS_PASSED = "All checks passed."
-MSG_SCRIPT_USAGE = "Usage: %s root_directory.\n"
+MSG_SCRIPT_USAGE = "Usage: %s root_directory\n"
 MSG_ERROR_SUMMARY = "Summary: Scan detected %d error(s) in %d file(s)."
 
 
@@ -94,7 +94,7 @@ def eol_at_eof(line):
 
 """Declare approved softare license headers as strings."""
 
-COPYRIGHT_APACHE_SOFTWARE_FOUNDATION = """\
+LICENSE_APACHE_SOFTWARE_FOUNDATION = """\
    /*
     * Licensed to the Apache Software Foundation (ASF) under one or more
     * contributor license agreements.  See the NOTICE file distributed with
@@ -112,8 +112,7 @@ COPYRIGHT_APACHE_SOFTWARE_FOUNDATION = """\
     * limitations under the License.
     */
     """
-
-COPYRIGHT_IBM_APACHE = """\
+LICENSE_IBM_APACHE = """\
    /*
     * Copyright 2015-2016 IBM Corporation
     *
@@ -132,10 +131,10 @@ COPYRIGHT_IBM_APACHE = """\
 """
 
 
-def has_block_copyright(path):
+def has_block_license(path):
     """Open file and verify it contains a valid license header."""
-    valid_licenses = [COPYRIGHT_APACHE_SOFTWARE_FOUNDATION,
-                      COPYRIGHT_IBM_APACHE]
+    valid_licenses = [LICENSE_APACHE_SOFTWARE_FOUNDATION,
+                      LICENSE_IBM_APACHE]
 
     with open(path) as fp:
         for license in valid_licenses:
@@ -249,14 +248,14 @@ if __name__ == "__main__":
     # This determines which checks run on which files.
     file_checks = [
         ("*", [is_not_symlink]),
-        ("*.scala", [has_block_copyright,
+        ("*.scala", [has_block_license,
                      line_checks([no_tabs,
                                   no_trailing_spaces,
                                   eol_at_eof])]),
         ("*.py", [line_checks([no_tabs,
                                no_trailing_spaces,
                                eol_at_eof])]),
-        ("*.java", [has_block_copyright,
+        ("*.java", [has_block_license,
                     line_checks([
                         no_tabs,
                         no_trailing_spaces,
@@ -272,7 +271,7 @@ if __name__ == "__main__":
         ("*.gradle", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])]),
         ("*.md", [line_checks([no_tabs,
                                eol_at_eof])]),
-        ("*.go", [has_block_copyright,
+        ("*.go", [has_block_license,
                   line_checks([no_tabs,
                                no_trailing_spaces,
                                eol_at_eof])])
