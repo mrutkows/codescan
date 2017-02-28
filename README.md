@@ -1,5 +1,5 @@
 # codescan
-Simple code scanner in Python
+Simple code scanner in Python.
 
 usage: scanCode.py [-h] [-v] [--config CONFIG] root_directory
 
