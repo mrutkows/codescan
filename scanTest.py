@@ -274,15 +274,10 @@ def all_paths(root_dir):
     # print exceptional_paths()
     for dir_path, dir_names, files in os.walk(root_dir):
         for f in files:
-            # if all(map(lambda p: not path.endswith(p), exceptional_paths())):
-            # print "dir_path [%s]" % dir_path
-            # print "f [%s]" % f
             # Map will contain a boolean for each exclusion path tested
             # as input to the lambda function
-            # only if all() values in the Map are true should it yeild
+            # only if all() values in the Map are "True" should it yield
             # a filename to run checks on
-            # print list(map(lambda p: not dir_path.endswith(p),
-            #                exceptional_paths()))
             if all(map(lambda p: not dir_path.endswith(p),
                        exclusion_paths)):
                 yield os.path.join(dir_path, f)
