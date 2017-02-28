@@ -320,6 +320,8 @@ if __name__ == "__main__":
         return os.path.isdir(root_dir)
 
     # create / configure our argument parser
+    # Note: ArgumentParser catches all errors writes message
+    # to override this behavior you would need to subclass it.
     parser = argparse.ArgumentParser(description=MSG_DESCRIPTION)
     parser.add_argument("-v", "--verbose",
                         action="store_true",
@@ -342,7 +344,7 @@ if __name__ == "__main__":
     root_dir = args.root_directory
     VERBOSE = args.verbose
 
-    # COnfig file at this point is an actual file object
+    # Config file at this point is an actual file object
     config_file = args.config
 
     # Read / load configuration file from file (pointer)
