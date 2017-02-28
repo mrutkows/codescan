@@ -7,7 +7,6 @@
    - no trailing whitespace
    - files end with EOL
    - valid license headers in source files (where applicable)
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,7 +23,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 """
 
 import collections
@@ -35,27 +33,90 @@ import platform
 import re
 import sys
 import textwrap
+import ConfigParser
 
 VERBOSE = False
 
+# Terminal colors
+BLUE = '\033[94m'
+CYAN = '\033[36m'
+GREEN = '\033[92m'
+RED = '\033[91m'
+# WHITE = '\033[37m'
+YELLOW = '\033[33m'
+# UNDERLINED = '\033[4;92m'
+
 # Translatable messages (error and general)
+ERR_INVALID_CONFIG_FILE = "Invalid configuration file [%s]: %s.\n"
 ERR_LICENSE = "file does not include required license header."
-ERR_SYMBOLIC_LINK = "file is a symbolic link."
+ERR_SYMBOLIC_LINK = "ERROR: file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 ERR_NO_EOL_AT_EOF = "file does not end with EOL."
-ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
-ERR_GENERAL = "There was an error."
-MSG_CHECKING_FILE = "Checking file[%s]..."
+ERR_PATH_IS_NOT_DIRECTORY = "ERROR: %s: %s is not a directory.\n"
+ERR_GENERAL = "An unspecified error was detected."
+MSG_SCANNING_STARTED = "Scanning files starting at [%s]..."
+MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
+MSG_RUNNING_FILE_CHECKS = "    Running File Check [%s]:"
+MSG_RUNNING_LINE_CHECKS = "    Running Line Check [%s]:"
+MSG_CHECKING_FILE = "  [%s]..."
 MSG_CHECKS_PASSED = "All checks passed."
 MSG_SCRIPT_USAGE = "Usage: %s root_directory\n"
-MSG_ERROR_SUMMARY = "Summary: Scan detected %d error(s) in %d file(s)."
+MSG_ERROR_SUMMARY = "Scan detected %d error(s) in %d file(s):"
+
+# Configuration file sections
+DEFAULT_CONFIG_FILE = "scanCode.cfg"
+SECTION_EXCLUDE = "Excludes"
+SECTION_INCLUDE = "Includes"
+SECTION_LICENSE = "Licenses"
+
+
+def print_error(msg):
+    """Print error message to stderr."""
+    sys.stderr.write(col.red(msg) + "\n")
+
+
+def print_warning(msg):
+    """Print warning message to stdout."""
+    print(col.yellow(msg))
+
+
+def print_status(msg):
+    """Print status message to stdout."""
+    print(msg)
+
+
+def print_success(msg):
+    """Print success message to stdout."""
+    print(col.green(msg))
+
+
+def print_highlight(msg):
+    """Print highlighted message to stdout."""
+    print(col.cyan(msg))
 
 
 def vprint(s):
     """Conditional print (stdout)."""
     if VERBOSE:
-        print s
+        print_status(s)
+
+
+def read_config_file():
+    """Read in and validate configuration file."""
+    try:
+        filename = DEFAULT_CONFIG_FILE
+        config = ConfigParser.ConfigParser()
+        config.read([filename])
+        read_license_files(config)
+    except:
+        # err = sys.exc_info()[0]
+        err = sys.exc_info()
+        print_error(ERR_INVALID_CONFIG_FILE % (filename, err))
+
+
+def read_license_files(config):
+    """Read the license files to use when scanning source files."""
 
 
 def exceptional_paths():
@@ -167,10 +228,14 @@ def line_checks(checks):
     def run_line_checks(file_path):
         errors = []
         ln = 0
+        # vprint(MSG_CHECKING_FILE % file_path)
         with open(file_path) as fp:
             for line in fp:
                 ln += 1
                 for check in checks:
+                    if ln == 1:
+                        vprint(col.yellow(MSG_RUNNING_LINE_CHECKS %
+                                          check.__name__))
                     err = check(line)
                     if err is not None:
                         errors.append((ln, err))
@@ -182,8 +247,9 @@ def run_file_checks(file_path, checks):
     """Run a series of file-by-file checks."""
     errors = []
     # if VERBOSE (True) then print filename being checked
-    vprint(col.green(MSG_CHECKING_FILE % file_path))
+    vprint(MSG_CHECKING_FILE % file_path)
     for check in checks:
+        vprint(col.cyan(MSG_RUNNING_FILE_CHECKS % check.__name__))
         errs = check(file_path)
         if errs:
             errors += errs
@@ -211,17 +277,21 @@ def colors():
     def colorize(code, string):
         return "%s%s%s" % (code, string, '\033[0m') if ansi else string
 
-    def blue(s):
-        return colorize('\033[94m', s)
+    def cyan(s):
+        return colorize(CYAN, s)
 
     def green(s):
-        return colorize('\033[92m', s)
+        return colorize(GREEN, s)
 
     def red(s):
-        return colorize('\033[91m', s)
+        return colorize(RED, s)
 
-    return collections.namedtuple("Colorizer",
-                                  "blue green red")(blue, green, red)
+    def yellow(s):
+        return colorize(YELLOW, s)
+
+    return collections.namedtuple(
+        "Colorizer",
+        "cyan green red yellow")(cyan, green, red, yellow)
 
 # Script entrypoint.
 if __name__ == "__main__":
@@ -230,15 +300,24 @@ if __name__ == "__main__":
     col = colors()
 
     # Test necessary arguments exist
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
         sys.stderr.write(col.red(MSG_SCRIPT_USAGE % sys.argv[0]))
         sys.exit(1)
 
+    # Establish root director where scanning will start recursively
     root_dir = sys.argv[1]
 
+    # Verbose flag, show detailed scanning information
+    if len(sys.argv) == 3 and sys.argv[2] == "-Verbose":
+        VERBOSE = True
+
+    # Read / load configuration file
+    read_config_file()
+
+    # Verify starting path parameter is valid
     if not os.path.isdir(root_dir):
-        sys.stderr.write(ERR_PATH_IS_NOT_DIRECTORY %
-                         (sys.argv[0], root_dir))
+        print_error(ERR_PATH_IS_NOT_DIRECTORY %
+                    (sys.argv[0], root_dir))
 
     # This determines which checks run on which files.
     file_checks = [
@@ -272,11 +351,15 @@ if __name__ == "__main__":
                                eol_at_eof])])
     ]
 
-    all_errors = []
+    # Positive feedback to caller that scanning has started
+    print_highlight(MSG_SCANNING_STARTED % root_dir)
 
     # Runs all listed checks on all relevant files.
+    all_errors = []
     for fltr, checks in file_checks:
+        vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
         for path in fnmatch.filter(all_paths(root_dir), fltr):
+            # vprint(MSG_CHECKING_FILE % path)
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
@@ -285,25 +368,28 @@ if __name__ == "__main__":
         # Filename is the 0th entry in tuple
         return p[0]
 
-    # Group/sort errors by filename
     if all_errors:
+        # Group / sort errors by filename
+        error_listing = ""
         files_with_errors = 0
-
         for path, triples in itertools.groupby(sorted(all_errors,
                                                       key=sort_key),
                                                key=sort_key):
             files_with_errors += 1
-            sys.stderr.write("%s:\n" % col.blue(path))
+            # print_status("  [%s:]" % path)
+            error_listing += "  [%s]:\n" % path
 
             pairs = sorted(map(lambda t: (t[1], t[2]), triples),
                            key=lambda p: p[0])
             for line, msg in pairs:
-                sys.stderr.write("    %4d: %s\n" % (line, msg))
+                # print_error("  %4d: %s\n" % (line, msg))
+                error_listing += col.red("    %4d: %s\n" % (line, msg))
 
-        # Summarize errors to stdout
-        message = MSG_ERROR_SUMMARY % (len(all_errors), files_with_errors)
-        sys.stderr.write(col.red(message) + "\n")
+        # Summarize errors
+        summary = MSG_ERROR_SUMMARY % (len(all_errors), files_with_errors)
+        print_highlight(summary)
+        print(error_listing)
         sys.exit(1)
     else:
-        print col.green(MSG_CHECKS_PASSED)
-        sys.exit(0)
+        print_success(MSG_CHECKS_PASSED)
+sys.exit(0)
