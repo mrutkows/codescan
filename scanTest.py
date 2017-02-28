@@ -42,9 +42,7 @@ BLUE = '\033[94m'
 CYAN = '\033[36m'
 GREEN = '\033[92m'
 RED = '\033[91m'
-# WHITE = '\033[37m'
 YELLOW = '\033[33m'
-# UNDERLINED = '\033[4;92m'
 
 # Translatable messages (error and general)
 ERR_INVALID_CONFIG_FILE = "Invalid configuration file [%s]: %s.\n"
@@ -53,8 +51,11 @@ ERR_SYMBOLIC_LINK = "file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 ERR_NO_EOL_AT_EOF = "file does not end with EOL."
-ERR_PATH_IS_NOT_DIRECTORY = "ERROR: %s: %s is not a directory.\n"
+ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
+WARN_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
+ERR_REQUIRED_SECTION = "Configuration file missing required section: [%s]"
 ERR_GENERAL = "an unspecified error was detected."
+MSG_CONFIG_ADDING_LICENSE_FILE = "Adding valid license from: [%s], value:\n%s"
 MSG_SCANNING_STARTED = "Scanning files starting at [%s]..."
 MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
 MSG_RUNNING_FILE_CHECKS = "    Running File Check [%s]"
@@ -69,6 +70,10 @@ DEFAULT_CONFIG_FILE = "scanCode.cfg"
 SECTION_EXCLUDE = "Excludes"
 SECTION_INCLUDE = "Includes"
 SECTION_LICENSE = "Licenses"
+
+# Globals
+"""Hold valid license headers within an array strings."""
+valid_licenses = []
 
 
 def print_error(msg):
@@ -102,6 +107,37 @@ def vprint(s):
         print_status(s)
 
 
+def get_config_section_dict(config, section):
+    """Retrieve key-value pairs for requested section of a config. file."""
+    dict1 = {}
+    try:
+        options = config.options(section)
+        for option in options:
+            try:
+                dict1[option] = config.get(section, option)
+            except:
+                dict1[option] = None
+    except:
+        print_warning(WARN_SECTION_NOT_FOUND % section)
+        return None
+    return dict1
+
+
+def read_license_files(config):
+    """Read the license files to use when scanning source files."""
+    file_dict = get_config_section_dict(config, SECTION_LICENSE)
+    # vprint("license_file_dict: " + str(file_dict))
+    if file_dict is not None:
+        for key in file_dict:
+            # Read and append entire text of each header to global array
+            with open(file_dict[key], 'rb') as temp_file:
+                str1 = str(temp_file.read())
+                valid_licenses.append(str(str1))
+                vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (file_dict[key], str1))
+    else:
+        raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
+
+
 def read_config_file():
     """Read in and validate configuration file."""
     try:
@@ -109,14 +145,10 @@ def read_config_file():
         config = ConfigParser.ConfigParser()
         config.read([filename])
         read_license_files(config)
-    except:
-        # err = sys.exc_info()[0]
-        err = sys.exc_info()
-        print_error(ERR_INVALID_CONFIG_FILE % (filename, err))
-
-
-def read_license_files(config):
-    """Read the license files to use when scanning source files."""
+    except Exception, e:
+        print_error(e)
+        return -1
+    return 0
 
 
 def exceptional_paths():
@@ -154,50 +186,9 @@ def eol_at_eof(line):
     else:
         return None
 
-"""Declare approved software license headers as strings."""
-
-LICENSE_APACHE_SOFTWARE_FOUNDATION = """\
-   /*
-    * Licensed to the Apache Software Foundation (ASF) under one or more
-    * contributor license agreements.  See the NOTICE file distributed with
-    * this work for additional information regarding copyright ownership.
-    * The ASF licenses this file to You under the Apache License, Version 2.0
-    * (the "License"); you may not use this file except in compliance with
-    * the License.  You may obtain a copy of the License at
-    *
-    *     http://www.apache.org/licenses/LICENSE-2.0
-    *
-    * Unless required by applicable law or agreed to in writing, software
-    * distributed under the License is distributed on an "AS IS" BASIS,
-    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    * See the License for the specific language governing permissions and
-    * limitations under the License.
-    */
-    """
-LICENSE_IBM_APACHE = """\
-   /*
-    * Copyright 2015-2016 IBM Corporation
-    *
-    * Licensed under the Apache License, Version 2.0 (the "License");
-    * you may not use this file except in compliance with the License.
-    * You may obtain a copy of the License at
-    *
-    * http://www.apache.org/licenses/LICENSE-2.0
-    *
-    * Unless required by applicable law or agreed to in writing, software
-    * distributed under the License is distributed on an "AS IS" BASIS,
-    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    * See the License for the specific language governing permissions and
-    * limitations under the License.
-    */
-"""
-
 
 def has_block_license(path):
     """Open file and verify it contains a valid license header."""
-    valid_licenses = [LICENSE_APACHE_SOFTWARE_FOUNDATION,
-                      LICENSE_IBM_APACHE]
-
     with open(path) as fp:
         for license in valid_licenses:
             # Assure license string is normalized to remove indentations
@@ -253,7 +244,6 @@ def run_file_checks(file_path, checks):
         errs = check(file_path)
         if errs:
             errors += errs
-
     return errors
 
 
@@ -312,12 +302,14 @@ if __name__ == "__main__":
         VERBOSE = True
 
     # Read / load configuration file
-    read_config_file()
+    if read_config_file() == -1:
+        exit(1)
 
     # Verify starting path parameter is valid
     if not os.path.isdir(root_dir):
         print_error(ERR_PATH_IS_NOT_DIRECTORY %
                     (sys.argv[0], root_dir))
+        exit(1)
 
     # This determines which checks run on which files.
     file_checks = [
