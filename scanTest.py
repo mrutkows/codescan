@@ -34,6 +34,7 @@ import re
 import sys
 import textwrap
 import ConfigParser
+import argparse
 
 VERBOSE = False
 
@@ -45,27 +46,29 @@ RED = '\033[91m'
 YELLOW = '\033[33m'
 
 # Translatable messages (error and general)
+ERR_GENERAL = "an unspecified error was detected."
 ERR_INVALID_CONFIG_FILE = "Invalid configuration file [%s]: %s.\n"
 ERR_LICENSE = "file does not include required license header."
+ERR_NO_EOL_AT_EOF = "file does not end with EOL."
+ERR_PATH_IS_NOT_DIRECTORY = "%s: [%s] is not a valid directory.\n"
+ERR_REQUIRED_SECTION = "Configuration file missing required section: [%s]"
 ERR_SYMBOLIC_LINK = "file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
-ERR_NO_EOL_AT_EOF = "file does not end with EOL."
-ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
-WARN_CONFIG_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
-WARN_SCAN_EXCLUDING_PATHS = "  Excluding paths: %s"
-WARN_SCAN_EXCLUDING_FILE = "  Excluding file: [%s]"
-ERR_REQUIRED_SECTION = "Configuration file missing required section: [%s]"
-ERR_GENERAL = "an unspecified error was detected."
-MSG_CONFIG_ADDING_LICENSE_FILE = "Adding valid license from: [%s], value:\n%s"
-MSG_SCANNING_STARTED = "Scanning files starting at [%s]..."
-MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
-MSG_RUNNING_FILE_CHECKS = "    Running File Check [%s]"
-MSG_RUNNING_LINE_CHECKS = "    Running Line Check [%s]"
 MSG_CHECKING_FILE = "  [%s]..."
 MSG_CHECKS_PASSED = "All checks passed."
-MSG_SCRIPT_USAGE = "Usage: %s root_directory [-Verbose]\n"
+MSG_CONFIG_ADDING_LICENSE_FILE = "Adding valid license from: [%s], value:\n%s"
 MSG_ERROR_SUMMARY = "Scan detected %d error(s) in %d file(s):"
+MSG_READING_CONFIGURATION = "Reading configuration file [%s]..."
+MSG_RUNNING_FILE_CHECKS = "    Running File Check [%s]"
+MSG_RUNNING_LINE_CHECKS = "    Running Line Check [%s]"
+MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
+MSG_SCANNING_STARTED = "Scanning files starting at [%s]..."
+WARN_CONFIG_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
+WARN_SCAN_EXCLUDING_FILE = "  Excluding file: [%s]"
+WARN_SCAN_EXCLUDING_PATHS = "  Excluding paths: %s"
+MSG_DESCRIPTION = "Scans all source code under specified directory for " \
+                  "project compliance using provided configuration."
 
 # Configuration file sections
 DEFAULT_CONFIG_FILE = "scanCode.cfg"
@@ -147,7 +150,7 @@ def read_path_exclusions(config):
     # vprint("license_file_dict: " + str(file_dict))
     if file_dict is not None:
         for key in file_dict:
-            print file_dict[key]
+            # print_status(WARN_SCAN_EXCLUDING_PATHS % file_dict[key])
             exclusion_paths.append(str(file_dict[key]))
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
@@ -157,6 +160,7 @@ def read_config_file():
     """Read in and validate configuration file."""
     try:
         filename = DEFAULT_CONFIG_FILE
+        print_highlight(MSG_READING_CONFIGURATION % filename)
         config = ConfigParser.ConfigParser()
         config.read([filename])
         read_license_files(config)
@@ -165,16 +169,6 @@ def read_config_file():
         print_error(e)
         return -1
     return 0
-
-
-# def exceptional_paths():
-#     """List of paths not subjected to the scan tests."""
-#     return [
-#         "bin/wskadmin",
-#         "bin/wskdev",
-#         "tests/build/reports",
-#         "tests/exclude"
-#     ]
 
 
 def no_tabs(line):
@@ -275,13 +269,14 @@ def all_paths(root_dir):
     for dir_path, dir_names, files in os.walk(root_dir):
         for f in files:
             # Map will contain a boolean for each exclusion path tested
-            # as input to the lambda function
-            # only if all() values in the Map are "True" should it yield
-            # a filename to run checks on
+            # as input to the lambda function.
+            # only if all() values in the Map are "True" (meaning the file is
+            # not excluded) then it should yield the filename to run checks on.
             if all(map(lambda p: not dir_path.endswith(p),
                        exclusion_paths)):
                 yield os.path.join(dir_path, f)
             else:
+                # Inform caller that file is being excluded
                 print_warning(WARN_SCAN_EXCLUDING_FILE %
                               os.path.join(dir_path, f))
 
@@ -291,6 +286,7 @@ def colors():
     ansi = hasattr(sys.stderr, "isatty") and platform.system() != "Windows"
 
     def colorize(code, string):
+        # Enable ANSI terminal color only around string provided (if valid)
         return "%s%s%s" % (code, string, '\033[0m') if ansi else string
 
     def cyan(s):
@@ -315,26 +311,43 @@ if __name__ == "__main__":
     # Prepare message colorization methods
     col = colors()
 
-    # Test necessary arguments exist
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print_error(MSG_SCRIPT_USAGE % sys.argv[0])
-        sys.exit(1)
+    # Parser helpers
+    def is_dir(path):
+        """."""
+        return os.path.isdir(root_dir)
 
-    # Establish root director where scanning will start recursively
-    root_dir = sys.argv[1]
+    # create / configure our argument parser
+    parser = argparse.ArgumentParser(description=MSG_DESCRIPTION)
+    parser.add_argument("-v", "--verbose",
+                        action="store_true",
+                        dest="verbose",
+                        default=False,
+                        help="Enable verbose output")
+    parser.add_argument("--config",
+                        type=argparse.FileType('r'),
+                        action="store",
+                        dest="config",
+                        default=DEFAULT_CONFIG_FILE,
+                        help="Provide custom scanner configuration file.")
+    parser.add_argument("root_directory",
+                        type=str,
+                        default=".",
+                        help="Starting directory for the scanner.")
 
-    # Verbose flag, show detailed scanning information
-    if len(sys.argv) == 3 and sys.argv[2] == "-Verbose":
-        VERBOSE = True
+    # Invoke parser, assign to locals
+    args = parser.parse_args()
+    root_dir = args.root_directory
+    VERBOSE = args.verbose
+    print_error("root_dir=[%s]" % root_dir)
 
     # Read / load configuration file
     if read_config_file() == -1:
         exit(1)
 
     # Verify starting path parameter is valid
-    if not os.path.isdir(root_dir):
-        print_error(ERR_PATH_IS_NOT_DIRECTORY %
-                    (sys.argv[0], root_dir))
+    if not is_dir(root_dir):
+        print_error(ERR_PATH_IS_NOT_DIRECTORY % (sys.argv[0], root_dir))
+        parser.print_help()
         exit(1)
 
     # This determines which checks run on which files.
