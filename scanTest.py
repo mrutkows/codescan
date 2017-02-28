@@ -52,7 +52,9 @@ ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 ERR_NO_EOL_AT_EOF = "file does not end with EOL."
 ERR_PATH_IS_NOT_DIRECTORY = "%s: %s is not a directory.\n"
-WARN_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
+WARN_CONFIG_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
+WARN_SCAN_EXCLUDING_PATHS = "  Excluding paths: %s"
+WARN_SCAN_EXCLUDING_FILE = "  Excluding file: [%s]"
 ERR_REQUIRED_SECTION = "Configuration file missing required section: [%s]"
 ERR_GENERAL = "an unspecified error was detected."
 MSG_CONFIG_ADDING_LICENSE_FILE = "Adding valid license from: [%s], value:\n%s"
@@ -74,6 +76,7 @@ SECTION_LICENSE = "Licenses"
 # Globals
 """Hold valid license headers within an array strings."""
 valid_licenses = []
+exclusion_paths = []
 
 
 def print_error(msg):
@@ -118,7 +121,7 @@ def get_config_section_dict(config, section):
             except:
                 dict1[option] = None
     except:
-        print_warning(WARN_SECTION_NOT_FOUND % section)
+        print_warning(WARN_CONFIG_SECTION_NOT_FOUND % section)
         return None
     return dict1
 
@@ -138,6 +141,18 @@ def read_license_files(config):
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
 
 
+def read_path_exclusions(config):
+    """Read the list of paths to exclude from the scan."""
+    file_dict = get_config_section_dict(config, SECTION_EXCLUDE)
+    # vprint("license_file_dict: " + str(file_dict))
+    if file_dict is not None:
+        for key in file_dict:
+            print file_dict[key]
+            exclusion_paths.append(str(file_dict[key]))
+    else:
+        raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
+
+
 def read_config_file():
     """Read in and validate configuration file."""
     try:
@@ -145,19 +160,21 @@ def read_config_file():
         config = ConfigParser.ConfigParser()
         config.read([filename])
         read_license_files(config)
+        read_path_exclusions(config)
     except Exception, e:
         print_error(e)
         return -1
     return 0
 
 
-def exceptional_paths():
-    """List of paths not subjected to the scan tests."""
-    return [
-        "bin/wskadmin",
-        "bin/wskdev",
-        "tests/build/reports"
-    ]
+# def exceptional_paths():
+#     """List of paths not subjected to the scan tests."""
+#     return [
+#         "bin/wskadmin",
+#         "bin/wskdev",
+#         "tests/build/reports",
+#         "tests/exclude"
+#     ]
 
 
 def no_tabs(line):
@@ -220,13 +237,14 @@ def line_checks(checks):
         errors = []
         ln = 0
         # vprint(MSG_CHECKING_FILE % file_path)
+        # For each line in the file, run all "line checks"
         with open(file_path) as fp:
             for line in fp:
                 ln += 1
                 for check in checks:
                     if ln == 1:
-                        vprint(col.yellow(MSG_RUNNING_LINE_CHECKS %
-                                          check.__name__))
+                        vprint(col.cyan(MSG_RUNNING_LINE_CHECKS %
+                                        check.__name__))
                     err = check(line)
                     if err is not None:
                         errors.append((ln, err))
@@ -253,11 +271,24 @@ def all_paths(root_dir):
     Iteration is recursive beginning at the passed root directory and
     skipping directories that are listed as exception paths.
     """
+    # print exceptional_paths()
     for dir_path, dir_names, files in os.walk(root_dir):
         for f in files:
-            path = os.path.join(dir_path, f)
-            if all(map(lambda p: not path.endswith(p), exceptional_paths())):
+            # if all(map(lambda p: not path.endswith(p), exceptional_paths())):
+            # print "dir_path [%s]" % dir_path
+            # print "f [%s]" % f
+            # Map will contain a boolean for each exclusion path tested
+            # as input to the lambda function
+            # only if all() values in the Map are true should it yeild
+            # a filename to run checks on
+            # print list(map(lambda p: not dir_path.endswith(p),
+            #                exceptional_paths()))
+            if all(map(lambda p: not dir_path.endswith(p),
+                       exclusion_paths)):
                 yield os.path.join(dir_path, f)
+            else:
+                print_warning(WARN_SCAN_EXCLUDING_FILE %
+                              os.path.join(dir_path, f))
 
 
 def colors():
@@ -291,7 +322,7 @@ if __name__ == "__main__":
 
     # Test necessary arguments exist
     if len(sys.argv) < 2 or len(sys.argv) > 3:
-        sys.stderr.write(col.red(MSG_SCRIPT_USAGE % sys.argv[0]))
+        print_error(MSG_SCRIPT_USAGE % sys.argv[0])
         sys.exit(1)
 
     # Establish root director where scanning will start recursively
@@ -345,13 +376,13 @@ if __name__ == "__main__":
 
     # Positive feedback to caller that scanning has started
     print_highlight(MSG_SCANNING_STARTED % root_dir)
+    print_warning(WARN_SCAN_EXCLUDING_PATHS % str(exclusion_paths))
 
     # Runs all listed checks on all relevant files.
     all_errors = []
     for fltr, checks in file_checks:
         vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
         for path in fnmatch.filter(all_paths(root_dir), fltr):
-            # vprint(MSG_CHECKING_FILE % path)
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
@@ -368,13 +399,11 @@ if __name__ == "__main__":
                                                       key=sort_key),
                                                key=sort_key):
             files_with_errors += 1
-            # print_status("  [%s:]" % path)
             error_listing += "  [%s]:\n" % path
 
             pairs = sorted(map(lambda t: (t[1], t[2]), triples),
                            key=lambda p: p[0])
             for line, msg in pairs:
-                # print_error("  %4d: %s\n" % (line, msg))
                 error_listing += col.red("    %4d: %s\n" % (line, msg))
 
         # Summarize errors
