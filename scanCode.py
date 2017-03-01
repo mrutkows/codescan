@@ -56,6 +56,7 @@ ERR_SYMBOLIC_LINK = "file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 HELP_CONFIG_FILE = "provide custom configuration file"
+HELP_DISPLAY_EXCLUSIONS = "display path exclusion information"
 HELP_ROOT_DIR = "starting directory for the scan"
 HELP_VERBOSE = "enable verbose output"
 MSG_CHECKING_FILE = "  [%s]..."
@@ -75,9 +76,12 @@ WARN_SCAN_EXCLUDED_PATH = "  Excluded path: %s"
 MSG_DESCRIPTION = "Scans all source code under specified directory for " \
                   "project compliance using provided configuration."
 
-# Configuration file sections
+# Default values for command line arguments
 DEFAULT_ROOT_DIR = "."
 DEFAULT_CONFIG_FILE = "scanCode.cfg"
+DEFAULT_LICENSE_SEARCH_SLACK = 500
+
+# Configuration file sections
 SECTION_EXCLUDE = "Excludes"
 SECTION_INCLUDE = "Includes"
 SECTION_LICENSE = "Licenses"
@@ -87,6 +91,7 @@ SECTION_LICENSE = "Licenses"
 valid_licenses = []
 exclusion_paths = []
 exclusion_files_set = set()
+license_search_slack_len = DEFAULT_LICENSE_SEARCH_SLACK
 
 
 def print_error(msg):
@@ -210,12 +215,14 @@ def has_block_license(path):
             # Assure license string is normalized to remove indentations
             # caused by declaration (above) as a string literal.
             normalized_license = textwrap.dedent(license)
-
-            file_head = fp.read(len(normalized_license))
+            # Search for license at start of file,
+            # allowing for some "slack" length
+            file_head = fp.read(len(normalized_license) +
+                                license_search_slack_len)
 
             if file_head is None:
                 return [(1, ERR_LICENSE)]
-            elif file_head == normalized_license:
+            elif normalized_license in file_head:
                 return []
             # reset and try finding the next license
             fp.seek(0)
@@ -234,19 +241,18 @@ def line_checks(checks):
     """Turn file-based check into line-by-line checks on each file."""
     def run_line_checks(file_path):
         errors = []
-        ln = 0
-        # vprint(MSG_CHECKING_FILE % file_path)
+        line_number = 0
         # For each line in the file, run all "line checks"
         with open(file_path) as fp:
             for line in fp:
-                ln += 1
+                line_number += 1
                 for check in checks:
-                    if ln == 1:
+                    if line_number == 1:
                         vprint(col.cyan(MSG_RUNNING_LINE_CHECKS %
                                         check.__name__))
                     err = check(line)
                     if err is not None:
-                        errors.append((ln, err))
+                        errors.append((line_number, err))
         return errors
     return run_line_checks
 
@@ -277,7 +283,8 @@ def all_paths(root_dir):
             # as input to the lambda function.
             # only if all() values in the Map are "True" (meaning the file is
             # not excluded) then it should yield the filename to run checks on.
-            if all(map(lambda p: not dir_path.endswith(p),
+            if all(map(lambda p: not dir_path.endswith(p) and
+                       p not in dir_path,
                        exclusion_paths)):
                 yield os.path.join(dir_path, f)
             else:
@@ -328,6 +335,11 @@ if __name__ == "__main__":
                         dest="verbose",
                         default=False,
                         help=HELP_VERBOSE)
+    parser.add_argument("-x",
+                        action="store_true",
+                        dest="display_exclusions",
+                        default=False,
+                        help=HELP_DISPLAY_EXCLUSIONS)
     parser.add_argument("--config",
                         type=argparse.FileType('r'),
                         action="store",
@@ -358,35 +370,49 @@ if __name__ == "__main__":
         exit(1)
 
     # This determines which checks run on which files.
+    # tuple is ( string <file-extension>,
+    #            array of <file-check-function-names>,
+    #            int <allowed>)
     file_checks = [
         ("*", [is_not_symlink]),
         ("*.scala", [has_block_license,
                      line_checks([no_tabs,
                                   no_trailing_spaces,
-                                  eol_at_eof])]),
-        ("*.py", [line_checks([no_tabs,
+                                  eol_at_eof])
+                     ]),
+        ("*.py", [has_block_license,
+                  line_checks([no_tabs,
                                no_trailing_spaces,
-                               eol_at_eof])]),
+                               eol_at_eof])
+                  ]),
         ("*.java", [has_block_license,
                     line_checks([
                         no_tabs,
                         no_trailing_spaces,
-                        eol_at_eof])]),
+                        eol_at_eof])
+                    ]),
         ("*.js", [line_checks([no_tabs,
                                no_trailing_spaces,
-                               eol_at_eof])]),
+                               eol_at_eof])
+                  ]),
         ("build.xml", [line_checks([no_tabs,
                                     no_trailing_spaces,
-                                    eol_at_eof])]),
+                                    eol_at_eof])
+                       ]),
         ("deploy.xml", [line_checks([no_tabs, no_trailing_spaces,
-                        eol_at_eof])]),
-        ("*.gradle", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])]),
+                        eol_at_eof])
+                        ]),
+        ("*.gradle", [line_checks([no_tabs, no_trailing_spaces,
+                                   eol_at_eof])
+                      ]),
         ("*.md", [line_checks([no_tabs,
-                               eol_at_eof])]),
+                               eol_at_eof])
+                  ]),
         ("*.go", [has_block_license,
                   line_checks([no_tabs,
                                no_trailing_spaces,
-                               eol_at_eof])])
+                               eol_at_eof])
+                  ])
     ]
 
     # Positive feedback to caller that scanning has started
@@ -400,17 +426,18 @@ if __name__ == "__main__":
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
-    # Inform caller which paths were excluded (by configuration)
-    print_warning(WARN_SCAN_EXCLUDED_PATH_SUMMARY % len(exclusion_paths))
-    for excluded_path in exclusion_paths:
-        print_warning(WARN_SCAN_EXCLUDED_PATH % excluded_path)
+    if args.display_exclusions or VERBOSE:
+        # Inform caller which paths were excluded (by configuration)
+        print_warning(WARN_SCAN_EXCLUDED_PATH_SUMMARY % len(exclusion_paths))
+        for excluded_path in exclusion_paths:
+            print_warning(WARN_SCAN_EXCLUDED_PATH % excluded_path)
 
-    # Inform caller which files where excluded
-    # TODO: collect / report names of files excluded by file extension
-    # perhaps using an optional argument
-    print_warning(WARN_SCAN_EXCLUDED_FILE_SUMMARY % len(exclusion_files_set))
-    for excluded_file in exclusion_files_set:
-        print_warning(WARN_SCAN_EXCLUDED_FILE % excluded_file)
+        # Inform caller which files where excluded
+        # perhaps using an optional argument
+        print_warning(WARN_SCAN_EXCLUDED_FILE_SUMMARY %
+                      len(exclusion_files_set))
+        for excluded_file in exclusion_files_set:
+            print_warning(WARN_SCAN_EXCLUDED_FILE % excluded_file)
 
     def sort_key(p):
         """Define sort key for error listing as the filename."""
