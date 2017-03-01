@@ -25,7 +25,9 @@
  */
 """
 
+import argparse
 import collections
+import ConfigParser
 import fnmatch
 import itertools
 import os
@@ -33,8 +35,6 @@ import platform
 import re
 import sys
 import textwrap
-import ConfigParser
-import argparse
 
 VERBOSE = False
 
@@ -68,8 +68,10 @@ MSG_RUNNING_LINE_CHECKS = "    Running Line Check [%s]"
 MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
 MSG_SCANNING_STARTED = "Scanning files starting at [%s]..."
 WARN_CONFIG_SECTION_NOT_FOUND = "Configuration file section [%s] not found."
-WARN_SCAN_EXCLUDING_FILE = "  Excluding file: [%s]"
-WARN_SCAN_EXCLUDING_PATHS = "  Excluding paths: %s"
+WARN_SCAN_EXCLUDED_PATH_SUMMARY = "Scan excluded (%s) directories:"
+WARN_SCAN_EXCLUDED_FILE_SUMMARY = "Scan excluded (%s) files:"
+WARN_SCAN_EXCLUDED_FILE = "  Excluded file: %s"
+WARN_SCAN_EXCLUDED_PATH = "  Excluded path: %s"
 MSG_DESCRIPTION = "Scans all source code under specified directory for " \
                   "project compliance using provided configuration."
 
@@ -84,6 +86,7 @@ SECTION_LICENSE = "Licenses"
 """Hold valid license headers within an array strings."""
 valid_licenses = []
 exclusion_paths = []
+exclusion_files_set = set()
 
 
 def print_error(msg):
@@ -154,7 +157,6 @@ def read_path_exclusions(config):
     # vprint("license_file_dict: " + str(file_dict))
     if file_dict is not None:
         for key in file_dict:
-            # print_status(WARN_SCAN_EXCLUDING_PATHS % file_dict[key])
             exclusion_paths.append(str(file_dict[key]))
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
@@ -279,9 +281,7 @@ def all_paths(root_dir):
                        exclusion_paths)):
                 yield os.path.join(dir_path, f)
             else:
-                # Inform caller that file is being excluded
-                print_warning(WARN_SCAN_EXCLUDING_FILE %
-                              os.path.join(dir_path, f))
+                exclusion_files_set.add(os.path.join(dir_path, f))
 
 
 def colors():
@@ -320,7 +320,7 @@ if __name__ == "__main__":
         return os.path.isdir(root_dir)
 
     # create / configure our argument parser
-    # Note: ArgumentParser catches all errors writes message
+    # Note: ArgumentParser catches all errors and outputs a message
     # to override this behavior you would need to subclass it.
     parser = argparse.ArgumentParser(description=MSG_DESCRIPTION)
     parser.add_argument("-v", "--verbose",
@@ -391,7 +391,6 @@ if __name__ == "__main__":
 
     # Positive feedback to caller that scanning has started
     print_highlight(MSG_SCANNING_STARTED % root_dir)
-    print_warning(WARN_SCAN_EXCLUDING_PATHS % str(exclusion_paths))
 
     # Runs all listed checks on all relevant files.
     all_errors = []
@@ -400,6 +399,18 @@ if __name__ == "__main__":
         for path in fnmatch.filter(all_paths(root_dir), fltr):
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
+
+    # Inform caller which paths were excluded (by configuration)
+    print_warning(WARN_SCAN_EXCLUDED_PATH_SUMMARY % len(exclusion_paths))
+    for excluded_path in exclusion_paths:
+        print_warning(WARN_SCAN_EXCLUDED_PATH % excluded_path)
+
+    # Inform caller which files where excluded
+    # TODO: collect / report names of files excluded by file extension
+    # perhaps using an optional argument
+    print_warning(WARN_SCAN_EXCLUDED_FILE_SUMMARY % len(exclusion_files_set))
+    for excluded_file in exclusion_files_set:
+        print_warning(WARN_SCAN_EXCLUDED_FILE % excluded_file)
 
     def sort_key(p):
         """Define sort key for error listing as the filename."""
