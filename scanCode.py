@@ -7,6 +7,7 @@
    - no trailing whitespace
    - files end with EOL
    - valid license headers in source files (where applicable)
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,7 +25,6 @@
  * limitations under the License.
  */
 """
-
 import argparse
 import collections
 import ConfigParser
@@ -126,10 +126,11 @@ def vprint(s):
 
 
 def get_config_section_dict(config, section):
-    """Retrieve key-value pairs for requested section of a config. file."""
+    """Retrieve key-value(s) for requested section of a config. file."""
     dict1 = {}
     try:
         options = config.options(section)
+        # print_warning("options for section: %s\n%s" % (section, options))
         for option in options:
             try:
                 dict1[option] = config.get(section, option)
@@ -144,25 +145,29 @@ def get_config_section_dict(config, section):
 def read_license_files(config):
     """Read the license files to use when scanning source files."""
     file_dict = get_config_section_dict(config, SECTION_LICENSE)
-    # vprint("license_file_dict: " + str(file_dict))
+    # vprint("file_dict: " + str(file_dict))
     if file_dict is not None:
         for key in file_dict:
             # Read and append entire text of each header to global array
-            with open(file_dict[key], 'rb') as temp_file:
+            # Each 'key' should be the name of a file with license text
+            # to scan for
+            with open(key, 'rb') as temp_file:
                 str1 = str(temp_file.read())
                 valid_licenses.append(str(str1))
-                vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (file_dict[key], str1))
+                vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (key, str1))
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
 
 
 def read_path_exclusions(config):
     """Read the list of paths to exclude from the scan."""
-    file_dict = get_config_section_dict(config, SECTION_EXCLUDE)
-    # vprint("license_file_dict: " + str(file_dict))
-    if file_dict is not None:
-        for key in file_dict:
-            exclusion_paths.append(str(file_dict[key]))
+    path_dict = get_config_section_dict(config, SECTION_EXCLUDE)
+    # vprint("path_dict: " + str(path_dict))
+    if path_dict is not None:
+        # each 'key' is an exclusion path
+        for key in path_dict:
+            if key is not None:
+                exclusion_paths.append(key)
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
 
@@ -171,7 +176,8 @@ def read_config_file(file):
     """Read in and validate configuration file."""
     try:
         print_highlight(MSG_READING_CONFIGURATION % file.name)
-        config = ConfigParser.ConfigParser()
+        # Provide for sections that have simply values (not key=value)
+        config = ConfigParser.ConfigParser(allow_no_value=True)
         config.readfp(file)
         read_license_files(config)
         read_path_exclusions(config)
@@ -283,9 +289,10 @@ def all_paths(root_dir):
             # as input to the lambda function.
             # only if all() values in the Map are "True" (meaning the file is
             # not excluded) then it should yield the filename to run checks on.
-            if all(map(lambda p: not dir_path.endswith(p) and
-                       p not in dir_path,
+            # not dir_path.endswith(p) and
+            if all(map(lambda p: p not in dir_path,
                        exclusion_paths)):
+                # print_success(dir_path)
                 yield os.path.join(dir_path, f)
             else:
                 exclusion_files_set.add(os.path.join(dir_path, f))
@@ -419,6 +426,7 @@ if __name__ == "__main__":
     print_highlight(MSG_SCANNING_STARTED % root_dir)
 
     # Runs all listed checks on all relevant files.
+    print all_paths
     all_errors = []
     for fltr, checks in file_checks:
         vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
