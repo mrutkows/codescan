@@ -426,7 +426,6 @@ if __name__ == "__main__":
     print_highlight(MSG_SCANNING_STARTED % root_dir)
 
     # Runs all listed checks on all relevant files.
-    print all_paths
     all_errors = []
     for fltr, checks in file_checks:
         vprint(col.cyan(MSG_SCANNING_FILTER % fltr))

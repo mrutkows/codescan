@@ -1,0 +1,26 @@
+[Licenses]
+ASFLicenseHeader.txt
+ApacheIBMLicenseHeader.txt
+
+[Excludes]
+.tox
+.git
+bin
+tests/build/reports
+tests/dat
+tests/exclude
+
+[Options]
+HEADER_SLACK_LENGTH=500
+
+[Includes]
+("*", [is_not_symlink])
+("*.scala", [has_block_license, line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("*.py", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("*.java", [has_block_license, line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("*.js", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("*.gradle", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("*.md", [line_checks([no_tabs, eol_at_eof])])
+("*.go", [has_block_license, line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("build.xml", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
+("deploy.xml", [line_checks([no_tabs, no_trailing_spaces, eol_at_eof])])
