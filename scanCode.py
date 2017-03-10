@@ -55,6 +55,7 @@ ERR_REQUIRED_SECTION = "Configuration file missing required section: [%s]"
 ERR_SYMBOLIC_LINK = "file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
+ERR_LICENSE_FILE_NOT_FOUND = "License file [%s] could not be found."
 HELP_CONFIG_FILE = "provide custom configuration file"
 HELP_DISPLAY_EXCLUSIONS = "display path exclusion information"
 HELP_ROOT_DIR = "starting directory for the scan"
@@ -64,6 +65,7 @@ MSG_CHECKS_PASSED = "All checks passed."
 MSG_CONFIG_ADDING_LICENSE_FILE = "Adding valid license from: [%s], value:\n%s"
 MSG_ERROR_SUMMARY = "Scan detected %d error(s) in %d file(s):"
 MSG_READING_CONFIGURATION = "Reading configuration file [%s]..."
+MSG_READING_LICENSE_FILE = "Reading license file [%s]..."
 MSG_RUNNING_FILE_CHECKS = "    Running File Check [%s]"
 MSG_RUNNING_LINE_CHECKS = "    Running Line Check [%s]"
 MSG_SCANNING_FILTER = "Scanning files with filter: [%s]:"
@@ -78,13 +80,18 @@ MSG_DESCRIPTION = "Scans all source code under specified directory for " \
 
 # Default values for command line arguments
 DEFAULT_ROOT_DIR = "."
+DEFAULT_PROGRAM_PATH = "./"
 DEFAULT_CONFIG_FILE = "scanCode.cfg"
 DEFAULT_LICENSE_SEARCH_SLACK = 500
 
 # Configuration file sections
+SECTION_LICENSE = "Licenses"
 SECTION_EXCLUDE = "Excludes"
 SECTION_INCLUDE = "Includes"
-SECTION_LICENSE = "Licenses"
+SECTION_OPTIONS = "Options"
+
+# Configuration Options known keys
+OPT_LICENSE_SLACK_LEN = "license_slack_length"
 
 # Globals
 """Hold valid license headers within an array strings."""
@@ -142,19 +149,42 @@ def get_config_section_dict(config, section):
     return dict1
 
 
+def find_license_on_path(filename, path):
+    """Find the specified filename in path; return it or raise error."""
+    filename = os.path.join(path, filename)
+
+    if not os.path.exists(filename):
+        raise Exception(ERR_LICENSE_FILE_NOT_FOUND %
+                        filename)
+    return filename
+
+
 def read_license_files(config):
     """Read the license files to use when scanning source files."""
     file_dict = get_config_section_dict(config, SECTION_LICENSE)
     # vprint("file_dict: " + str(file_dict))
     if file_dict is not None:
-        for key in file_dict:
-            # Read and append entire text of each header to global array
-            # Each 'key' should be the name of a file with license text
-            # to scan for
-            with open(key, 'rb') as temp_file:
-                str1 = str(temp_file.read())
-                valid_licenses.append(str(str1))
-                vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (key, str1))
+        # for each key (license filename) in license section
+        for license_filename in file_dict:
+            # Read and append text of each license (header) to a global array.
+            # Each 'key' should be a filename containing license text.
+            try:
+
+                # if the file is not in current directory, try to find
+                # it in the path this script is being executed from.
+                if not os.path.exists(license_filename):
+                    license_filename = find_license_on_path(
+                        license_filename,
+                        DEFAULT_PROGRAM_PATH)
+
+                with open(license_filename, 'rb') as temp_file:
+                    vprint(MSG_READING_LICENSE_FILE % license_filename)
+                    str1 = str(temp_file.read())
+                    valid_licenses.append(str(str1))
+                    vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (license_filename,
+                                                             str1))
+            except Exception, e:
+                raise e
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
 
@@ -172,6 +202,20 @@ def read_path_exclusions(config):
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
 
 
+def read_scan_options(config):
+    """Read the Options from the configuration file."""
+    options_dict = get_config_section_dict(config, SECTION_OPTIONS)
+    # vprint("options_dict: " + str(options_dict))
+    if options_dict is not None:
+        # Check for license scan slack length option
+        # Set global variable to value found in config.
+        if OPT_LICENSE_SLACK_LEN in options_dict:
+            global license_search_slack_len
+            license_search_slack_len = int(options_dict[OPT_LICENSE_SLACK_LEN])
+    else:
+        raise Exception(ERR_REQUIRED_SECTION % SECTION_OPTIONS)
+
+
 def read_config_file(file):
     """Read in and validate configuration file."""
     try:
@@ -181,6 +225,7 @@ def read_config_file(file):
         config.readfp(file)
         read_license_files(config)
         read_path_exclusions(config)
+        read_scan_options(config)
     except Exception, e:
         print_error(e)
         return -1
@@ -332,6 +377,13 @@ if __name__ == "__main__":
     def is_dir(path):
         """Check if path is a directory."""
         return os.path.isdir(root_dir)
+
+    # identify the path (directory) where scanCode.py is located
+    # Use this as default for finding default configuration
+    DEFAULT_PROGRAM_PATH = os.path.split(os.path.abspath(__file__))[0]
+    # vprintf("DEFAULT_PROGRAM_PATH: =[%s]" % DEFAULT_PROGRAM_PATH)
+    DEFAULT_CONFIG_FILE = os.path.join(DEFAULT_PROGRAM_PATH,
+                                       DEFAULT_CONFIG_FILE)
 
     # create / configure our argument parser
     # Note: ArgumentParser catches all errors and outputs a message
