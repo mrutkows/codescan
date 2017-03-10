@@ -433,14 +433,14 @@ if __name__ == "__main__":
             errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
+    # Display path and file exclusion details
     if args.display_exclusions or VERBOSE:
-        # Inform caller which paths were excluded (by configuration)
         print_warning(WARN_SCAN_EXCLUDED_PATH_SUMMARY % len(exclusion_paths))
+        # Display all paths that were excluded (by configuration)
         for excluded_path in exclusion_paths:
             print_warning(WARN_SCAN_EXCLUDED_PATH % excluded_path)
 
-        # Inform caller which files where excluded
-        # perhaps using an optional argument
+        # Inform caller which files where excluded from these paths
         print_warning(WARN_SCAN_EXCLUDED_FILE_SUMMARY %
                       len(exclusion_files_set))
         for excluded_file in exclusion_files_set:
