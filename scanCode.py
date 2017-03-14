@@ -227,6 +227,9 @@ def read_config_file(file):
         print_highlight(MSG_READING_CONFIGURATION % file.name)
         # Provide for sections that have simply values (not key=value)
         config = ConfigParser.ConfigParser(allow_no_value=True)
+        # This option prevents options from being normalized to lowercase
+        # by allowing the raw string in the config. to be passed through
+        config.optionxform = str
         config.readfp(file)
         read_license_files(config)
         read_path_inclusions(config)
@@ -299,7 +302,6 @@ def read_path_inclusions(config):
     """Read the list of paths to include in scan tests."""
     inclusion_dict = get_config_section_dict(config, SECTION_INCLUDE)
     # vprint("inclusion_dict: " + str(inclusion_dict))
-    # print "\n------\n"
 
     for key in inclusion_dict:
         all_checks = inclusion_dict[key]
@@ -314,10 +316,8 @@ def read_path_inclusions(config):
             try:
                 fx = globals()[fname]
                 if fname in FILE_CHECK_FUNCTIONS:
-                    # print_success("        appending to file checks...")
                     file_check_fxs.append(fx)
                 elif fname in LINE_CHECK_FUNCTIONS:
-                    # print_success("        appending to line checks...")
                     line_check_fxs.append(fx)
             except Exception:
                 print_error(ERR_INVALID_SCAN_FUNCTION % (key, fname))
@@ -365,7 +365,7 @@ def all_paths(root_dir):
     Iteration is recursive beginning at the passed root directory and
     skipping directories that are listed as exception paths.
     """
-    # print exceptional_paths()
+    # For every file in every directory (path) starting at "root_dir"
     for dir_path, dir_names, files in os.walk(root_dir):
         for f in files:
             # Map will contain a boolean for each exclusion path tested
@@ -375,7 +375,6 @@ def all_paths(root_dir):
             # not dir_path.endswith(p) and
             if all(map(lambda p: p not in dir_path,
                        exclusion_paths)):
-                # print_success(dir_path)
                 yield os.path.join(dir_path, f)
             else:
                 exclusion_files_set.add(os.path.join(dir_path, f))
