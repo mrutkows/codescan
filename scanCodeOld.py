@@ -7,7 +7,6 @@
    - no trailing whitespace
    - files end with EOL
    - valid license headers in source files (where applicable)
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -99,9 +98,6 @@ valid_licenses = []
 exclusion_paths = []
 exclusion_files_set = set()
 license_search_slack_len = DEFAULT_LICENSE_SEARCH_SLACK
-FILE_CHECK_FUNCTIONS = dict()
-LINE_CHECK_FUNCTIONS = dict()
-FILTERS_WITH_CHECK_FUNCTIONS = []
 
 
 def print_error(msg):
@@ -227,7 +223,6 @@ def read_config_file(file):
         config = ConfigParser.ConfigParser(allow_no_value=True)
         config.readfp(file)
         read_license_files(config)
-        read_path_inclusions(config)
         read_path_exclusions(config)
         read_scan_options(config)
     except Exception, e:
@@ -312,78 +307,6 @@ def line_checks(checks):
     return run_line_checks
 
 
-def run_line_checks2(file_path, checks):
-    """."""
-    errors = []
-    line_number = 0
-    # For each line in the file, run all "line checks"
-    with open(file_path) as fp:
-        for line in fp:
-            line_number += 1
-            for check in checks:
-                if line_number == 1:
-                    vprint(col.cyan(MSG_RUNNING_LINE_CHECKS %
-                                    check.__name__))
-                err = check(line)
-                if err is not None:
-                    errors.append((line_number, err))
-    return errors
-
-
-def read_path_inclusions(config):
-    """Read the list of paths to include in scan tests."""
-    inclusion_dict = get_config_section_dict(config, SECTION_INCLUDE)
-    print_success("inclusion_dict: " + str(inclusion_dict))
-
-    print "\n------\n"
-
-    for key in inclusion_dict:
-        all_checks = inclusion_dict[key]
-
-        print "key=" + key
-        print "    all_checks (BEFORE)=" + str(all_checks)
-
-        # strip off all whitespace, regardless of index
-        all_checks = all_checks.translate(None, ' ')
-        print "    all_checks (AFTER)=" + all_checks
-
-        # retrieve the names of all functions to scan for
-        # the respective filename (wildcards allowed)
-        function_names = all_checks.split(',')
-        print "    function_names (LIST)=" + str(function_names)
-
-        file_check_fxs = []
-        line_check_fxs = []
-
-        for fname in function_names:
-            print "    fname=" + fname
-            fx = globals()[fname]
-            print "        fx=" + str(fx)
-
-            print "        FILE_CHECK_FUNCTIONS" + str(FILE_CHECK_FUNCTIONS)
-            print "        LINE_CHECK_FUNCTIONS" + str(LINE_CHECK_FUNCTIONS)
-
-            if fname in FILE_CHECK_FUNCTIONS:
-                print_success("        appending to file checks...")
-                file_check_fxs.append(fx)
-            elif fname in LINE_CHECK_FUNCTIONS:
-                print_success("        appending to line checks...")
-                line_check_fxs.append(fx)
-            else:
-                print_error("NOT FOUND IN EITHER")
-                # print "        FILE=" + str(FILE_CHECK_FUNCTIONS[fname])
-                # print "        LINE=" + str(LINE_CHECK_FUNCTIONS[fname])
-            print "......"
-        print_warning("file_checks=" + str(file_check_fxs))
-        print_warning("line_checks=" + str(line_check_fxs))
-        a_tuple = (key, file_check_fxs, line_check_fxs)
-        print a_tuple
-        FILTERS_WITH_CHECK_FUNCTIONS.append(a_tuple)
-
-    print FILTERS_WITH_CHECK_FUNCTIONS
-    print "\n------\n"
-
-
 def run_file_checks(file_path, checks):
     """Run a series of file-by-file checks."""
     errors = []
@@ -446,7 +369,6 @@ def colors():
 # Script entrypoint.
 if __name__ == "__main__":
 
-    print dir()
     # Prepare message colorization methods
     col = colors()
 
@@ -494,18 +416,6 @@ if __name__ == "__main__":
 
     # Config file at this point is an actual file object
     config_file = args.config
-
-    # Scan functions
-    FILE_CHECK_FUNCTIONS.update({
-        "has_block_license": has_block_license,
-        "is_not_symlink": is_not_symlink
-    })
-
-    LINE_CHECK_FUNCTIONS.update({
-        "no_tabs": no_tabs,
-        "no_trailing_spaces": no_trailing_spaces,
-        "eol_at_eof": eol_at_eof
-    })
 
     # Read / load configuration file from file (pointer)
     if read_config_file(config_file) == -1:
@@ -568,19 +478,10 @@ if __name__ == "__main__":
 
     # Runs all listed checks on all relevant files.
     all_errors = []
-    # for fltr, checks in file_checks:
-    #     vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
-    #     for path in fnmatch.filter(all_paths(root_dir), fltr):
-    #         errors = run_file_checks(path, checks)
-    #         all_errors += map(lambda p: (path, p[0], p[1]), errors)
-
-    for fltr, chks1, chks2 in FILTERS_WITH_CHECK_FUNCTIONS:
-        print_error(col.cyan(MSG_SCANNING_FILTER % fltr))
-        print_error("chks1=" + str(chks1))
-        print_error("chks2=" + str(chks2))
+    for fltr, checks in file_checks:
+        vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
         for path in fnmatch.filter(all_paths(root_dir), fltr):
-            errors = run_file_checks(path, chks1)
-            errors += run_line_checks2(path, chks2)
+            errors = run_file_checks(path, checks)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
     # Display path and file exclusion details
