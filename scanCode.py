@@ -56,6 +56,8 @@ ERR_SYMBOLIC_LINK = "file is a symbolic link."
 ERR_TABS = "line contains tabs."
 ERR_TRAILING_WHITESPACE = "line has trailing whitespaces."
 ERR_LICENSE_FILE_NOT_FOUND = "License file [%s] could not be found."
+ERR_INVALID_SCAN_FUNCTION = "Config. file filter [%s] lists invalid " \
+                            "function [%s]."
 HELP_CONFIG_FILE = "provide custom configuration file"
 HELP_DISPLAY_EXCLUSIONS = "display path exclusion information"
 HELP_ROOT_DIR = "starting directory for the scan"
@@ -292,27 +294,54 @@ def is_not_symlink(path):
         return None
 
 
-def line_checks(checks):
-    """Turn file-based check into line-by-line checks on each file."""
-    def run_line_checks(file_path):
-        errors = []
-        line_number = 0
-        # For each line in the file, run all "line checks"
-        with open(file_path) as fp:
-            for line in fp:
-                line_number += 1
-                for check in checks:
-                    if line_number == 1:
-                        vprint(col.cyan(MSG_RUNNING_LINE_CHECKS %
-                                        check.__name__))
-                    err = check(line)
-                    if err is not None:
-                        errors.append((line_number, err))
-        return errors
-    return run_line_checks
+# Note: this function must appear after all "check" functions are defined
+def read_path_inclusions(config):
+    """Read the list of paths to include in scan tests."""
+    inclusion_dict = get_config_section_dict(config, SECTION_INCLUDE)
+    # vprint("inclusion_dict: " + str(inclusion_dict))
+    # print "\n------\n"
+
+    for key in inclusion_dict:
+        all_checks = inclusion_dict[key]
+        # strip off all whitespace, regardless of index
+        all_checks = all_checks.translate(None, ' ')
+        # retrieve the names of all functions to scan for
+        # the respective filename (wildcards allowed)
+        function_names = all_checks.split(',')
+        file_check_fxs = []
+        line_check_fxs = []
+        for fname in function_names:
+            try:
+                fx = globals()[fname]
+                if fname in FILE_CHECK_FUNCTIONS:
+                    # print_success("        appending to file checks...")
+                    file_check_fxs.append(fx)
+                elif fname in LINE_CHECK_FUNCTIONS:
+                    # print_success("        appending to line checks...")
+                    line_check_fxs.append(fx)
+            except Exception:
+                print_error(ERR_INVALID_SCAN_FUNCTION % (key, fname))
+                sys.exit(1)
+
+        a_tuple = (key, file_check_fxs, line_check_fxs)
+        FILTERS_WITH_CHECK_FUNCTIONS.append(a_tuple)
+    # vprint("filters(checks):" + str(FILTERS_WITH_CHECK_FUNCTIONS))
 
 
-def run_line_checks2(file_path, checks):
+def run_file_checks(file_path, checks):
+    """Run a series of file-by-file checks."""
+    errors = []
+    # if VERBOSE (True) then print filename being checked
+    vprint(MSG_CHECKING_FILE % file_path)
+    for check in checks:
+        vprint(col.cyan(MSG_RUNNING_FILE_CHECKS % check.__name__))
+        errs = check(file_path)
+        if errs:
+            errors += errs
+    return errors
+
+
+def run_line_checks(file_path, checks):
     """."""
     errors = []
     line_number = 0
@@ -327,73 +356,6 @@ def run_line_checks2(file_path, checks):
                 err = check(line)
                 if err is not None:
                     errors.append((line_number, err))
-    return errors
-
-
-def read_path_inclusions(config):
-    """Read the list of paths to include in scan tests."""
-    inclusion_dict = get_config_section_dict(config, SECTION_INCLUDE)
-    print_success("inclusion_dict: " + str(inclusion_dict))
-
-    print "\n------\n"
-
-    for key in inclusion_dict:
-        all_checks = inclusion_dict[key]
-
-        print "key=" + key
-        print "    all_checks (BEFORE)=" + str(all_checks)
-
-        # strip off all whitespace, regardless of index
-        all_checks = all_checks.translate(None, ' ')
-        print "    all_checks (AFTER)=" + all_checks
-
-        # retrieve the names of all functions to scan for
-        # the respective filename (wildcards allowed)
-        function_names = all_checks.split(',')
-        print "    function_names (LIST)=" + str(function_names)
-
-        file_check_fxs = []
-        line_check_fxs = []
-
-        for fname in function_names:
-            print "    fname=" + fname
-            fx = globals()[fname]
-            print "        fx=" + str(fx)
-
-            print "        FILE_CHECK_FUNCTIONS" + str(FILE_CHECK_FUNCTIONS)
-            print "        LINE_CHECK_FUNCTIONS" + str(LINE_CHECK_FUNCTIONS)
-
-            if fname in FILE_CHECK_FUNCTIONS:
-                print_success("        appending to file checks...")
-                file_check_fxs.append(fx)
-            elif fname in LINE_CHECK_FUNCTIONS:
-                print_success("        appending to line checks...")
-                line_check_fxs.append(fx)
-            else:
-                print_error("NOT FOUND IN EITHER")
-                # print "        FILE=" + str(FILE_CHECK_FUNCTIONS[fname])
-                # print "        LINE=" + str(LINE_CHECK_FUNCTIONS[fname])
-            print "......"
-        print_warning("file_checks=" + str(file_check_fxs))
-        print_warning("line_checks=" + str(line_check_fxs))
-        a_tuple = (key, file_check_fxs, line_check_fxs)
-        print a_tuple
-        FILTERS_WITH_CHECK_FUNCTIONS.append(a_tuple)
-
-    print FILTERS_WITH_CHECK_FUNCTIONS
-    print "\n------\n"
-
-
-def run_file_checks(file_path, checks):
-    """Run a series of file-by-file checks."""
-    errors = []
-    # if VERBOSE (True) then print filename being checked
-    vprint(MSG_CHECKING_FILE % file_path)
-    for check in checks:
-        vprint(col.cyan(MSG_RUNNING_FILE_CHECKS % check.__name__))
-        errs = check(file_path)
-        if errs:
-            errors += errs
     return errors
 
 
@@ -446,7 +408,6 @@ def colors():
 # Script entrypoint.
 if __name__ == "__main__":
 
-    print dir()
     # Prepare message colorization methods
     col = colors()
 
@@ -495,12 +456,14 @@ if __name__ == "__main__":
     # Config file at this point is an actual file object
     config_file = args.config
 
-    # Scan functions
+    # Assign supported scan functions to either file or line globals
+    # These checks run once per-file
     FILE_CHECK_FUNCTIONS.update({
-        "has_block_license": has_block_license,
-        "is_not_symlink": is_not_symlink
+        "is_not_symlink": is_not_symlink,
+        "has_block_license": has_block_license
     })
 
+    # These checks run once per-line, per-file
     LINE_CHECK_FUNCTIONS.update({
         "no_tabs": no_tabs,
         "no_trailing_spaces": no_trailing_spaces,
@@ -517,70 +480,19 @@ if __name__ == "__main__":
         parser.print_help()
         exit(1)
 
-    # This determines which checks run on which files.
-    # tuple is ( string <file-extension>,
-    #            array of <file-check-function-names>,
-    #            int <allowed>)
-    file_checks = [
-        ("*", [is_not_symlink]),
-        ("*.scala", [has_block_license,
-                     line_checks([no_tabs,
-                                  no_trailing_spaces,
-                                  eol_at_eof])
-                     ]),
-        ("*.py", [has_block_license,
-                  line_checks([no_tabs,
-                               no_trailing_spaces,
-                               eol_at_eof])
-                  ]),
-        ("*.java", [has_block_license,
-                    line_checks([
-                        no_tabs,
-                        no_trailing_spaces,
-                        eol_at_eof])
-                    ]),
-        ("*.js", [line_checks([no_tabs,
-                               no_trailing_spaces,
-                               eol_at_eof])
-                  ]),
-        ("build.xml", [line_checks([no_tabs,
-                                    no_trailing_spaces,
-                                    eol_at_eof])
-                       ]),
-        ("deploy.xml", [line_checks([no_tabs, no_trailing_spaces,
-                        eol_at_eof])
-                        ]),
-        ("*.gradle", [line_checks([no_tabs, no_trailing_spaces,
-                                   eol_at_eof])
-                      ]),
-        ("*.md", [line_checks([no_tabs,
-                               eol_at_eof])
-                  ]),
-        ("*.go", [has_block_license,
-                  line_checks([no_tabs,
-                               no_trailing_spaces,
-                               eol_at_eof])
-                  ])
-    ]
-
     # Positive feedback to caller that scanning has started
     print_highlight(MSG_SCANNING_STARTED % root_dir)
 
     # Runs all listed checks on all relevant files.
     all_errors = []
-    # for fltr, checks in file_checks:
-    #     vprint(col.cyan(MSG_SCANNING_FILTER % fltr))
-    #     for path in fnmatch.filter(all_paths(root_dir), fltr):
-    #         errors = run_file_checks(path, checks)
-    #         all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
     for fltr, chks1, chks2 in FILTERS_WITH_CHECK_FUNCTIONS:
-        print_error(col.cyan(MSG_SCANNING_FILTER % fltr))
-        print_error("chks1=" + str(chks1))
-        print_error("chks2=" + str(chks2))
+        # print_error(col.cyan(MSG_SCANNING_FILTER % fltr))
+        # print_error("chks1=" + str(chks1))
+        # print_error("chks2=" + str(chks2))
         for path in fnmatch.filter(all_paths(root_dir), fltr):
             errors = run_file_checks(path, chks1)
-            errors += run_line_checks2(path, chks2)
+            errors += run_line_checks(path, chks2)
             all_errors += map(lambda p: (path, p[0], p[1]), errors)
 
     # Display path and file exclusion details
@@ -620,6 +532,7 @@ if __name__ == "__main__":
         summary = MSG_ERROR_SUMMARY % (len(all_errors), files_with_errors)
         print_highlight(summary)
         print(error_listing)
+        print_error(summary)
         sys.exit(1)
     else:
         print_success(MSG_CHECKS_PASSED)
