@@ -309,7 +309,7 @@ def read_path_inclusions(config):
     for key in inclusion_dict:
         all_checks = inclusion_dict[key]
         # strip off all whitespace, regardless of index
-        all_checks = all_checks.translate(None, ' ')
+        all_checks = all_checks.replace(' ', '')
         # retrieve the names of all functions to scan for
         # the respective filename (wildcards allowed)
         function_names = all_checks.split(',')
