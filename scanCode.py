@@ -188,7 +188,7 @@ def read_license_files(config):
                     valid_licenses.append(str(str1))
                     vprint(MSG_CONFIG_ADDING_LICENSE_FILE % (license_filename,
                                                              str1))
-            except Exception, e:
+            except Exception as e:
                 raise e
     else:
         raise Exception(ERR_REQUIRED_SECTION % SECTION_LICENSE)
@@ -235,7 +235,7 @@ def read_config_file(file):
         read_path_inclusions(config)
         read_path_exclusions(config)
         read_scan_options(config)
-    except Exception, e:
+    except Exception as e:
         print_error(e)
         return -1
     return 0
