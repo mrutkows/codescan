@@ -27,7 +27,10 @@
 """
 import argparse
 import collections
-import ConfigParser
+try:
+    import configparser
+except ImportError:
+    import ConfigParser as configparser
 import fnmatch
 import itertools
 import os
@@ -226,7 +229,7 @@ def read_config_file(file):
     try:
         print_highlight(MSG_READING_CONFIGURATION % file.name)
         # Provide for sections that have simply values (not key=value)
-        config = ConfigParser.ConfigParser(allow_no_value=True)
+        config = configparser.ConfigParser(allow_no_value=True)
         # This option prevents options from being normalized to lowercase
         # by allowing the raw string in the config. to be passed through
         config.optionxform = str
