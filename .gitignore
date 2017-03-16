@@ -1,6 +1,9 @@
 # Mac
 .DS_Store
 
+# Linux
+*~
+
 # Sublime
 *.sublime-project
 *.sublime-workspace
