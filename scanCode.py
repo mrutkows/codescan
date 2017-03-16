@@ -185,7 +185,7 @@ def read_license_files(config):
                         license_filename,
                         DEFAULT_PROGRAM_PATH)
 
-                with open(license_filename, 'rb') as temp_file:
+                with open(license_filename, 'r') as temp_file:
                     vprint(MSG_READING_LICENSE_FILE % license_filename)
                     str1 = str(temp_file.read())
                     valid_licenses.append(str(str1))
