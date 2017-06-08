@@ -8,4 +8,4 @@ python:
 # command to run tests
 script:
   - cd codescan
-  - ./codescan/test.sh
+  - ./test.sh
