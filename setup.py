@@ -3,14 +3,17 @@ from distutils.core import setup
 setup(
     name='codescan',
     packages=['codescan'],
-    version='0.8',
+    version='0.2.0',
     description='Simple configurable code scanner in Python.',
     author='Matt Rutkowski',
     author_email='mrutkowski91@gmail.com',
     url='https://github.com/mrutkows/codescan',
+    # data_files=[
+    #     ('bitmaps', ['bm/b1.gif', 'bm/b2.gif']),
+    #     ('config', ['cfg/data.cfg']),
+    #     ('/etc/init.d', ['init-script'])]
     # download_url='https://github.com/mrutkows/scancode/archive/0.1.tar.gz',
     keywords=['scanning', 'code', 'scan'],
-    # classifiers=[],
     classifiers=(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License'

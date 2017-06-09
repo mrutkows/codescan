@@ -1,0 +1,9 @@
+# documentation
+include README.md
+
+# license
+include LICENSE.txt
+
+# config and text files
+include codescan/scanCode.cfg
+include codescan/*.txt
