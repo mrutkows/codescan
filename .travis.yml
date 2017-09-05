@@ -7,5 +7,8 @@ python:
 # install: "pip install -r requirements.txt"
 # command to run tests
 script:
+  - echo $TRAVIS
+  - echo $TRAVIS_PULL_REQUEST
+  - echo $TRAVIS_SECURE_ENV_VARS
   - cd codescan
   - ./test.sh
